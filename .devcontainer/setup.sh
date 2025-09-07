@@ -1,30 +1,44 @@
 #!/bin/bash
 # GitHub Codespaces setup script for Inventory Intelligence
+# Non-interactive setup to prevent container build failures
+
+set -e  # Exit on any error
 
 echo "🏪 Setting up Inventory Intelligence environment..."
 
-# Install Python dependencies
-pip install --upgrade pip
-pip install -r requirements.txt
+# Ensure we're in the correct directory
+cd /workspaces/inventory-intelligence-h2o
 
-# Install additional tools for demos
-pip install jupyter notebook ipywidgets
+# Install Python dependencies with error handling
+echo "📦 Installing Python dependencies..."
+pip install --upgrade pip --quiet
+pip install -r requirements.txt --quiet
+
+echo "✅ Python dependencies installed"
 
 # Make scripts executable
-chmod +x deploy.sh
-chmod +x scripts/*.sh
+echo "🔧 Setting up scripts..."
+chmod +x deploy.sh 2>/dev/null || true
+chmod +x scripts/*.sh 2>/dev/null || true
 
 # Create directories
+echo "📁 Creating directories..."
 mkdir -p shared/data shared/models logs
 
-# Generate sample data if H2O is available
-echo "📊 Preparing synthetic data generation..."
-python -c "import h2o; print('H2O available')" 2>/dev/null || echo "⚠️ H2O will be installed on first run"
+# Test Python environment
+echo "🐍 Testing Python environment..."
+python3 -c "import sys; print(f'Python {sys.version}')"
 
-# Pre-warm Docker if needed
-docker --version || echo "Docker not available in this environment"
+# Check if requirements are properly installed
+echo "📊 Checking core dependencies..."
+python3 -c "import streamlit, pandas, numpy, plotly; print('✅ Core packages available')" 2>/dev/null || echo "⚠️  Some packages may need manual installation"
 
+echo ""
 echo "✅ Environment setup complete!"
-echo "🚀 Run './deploy.sh' to start the application"
-echo "📊 Dashboard will be available on port 8501"
-echo "🤖 H2O cluster will be available on port 54321"
+echo ""
+echo "🚀 To start the demo:"
+echo "   ./scripts/codespaces-demo.sh"
+echo ""
+echo "📊 Or start manually:"
+echo "   streamlit run streamlit_app.py"
+echo ""

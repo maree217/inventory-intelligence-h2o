@@ -1,118 +1,137 @@
 #!/bin/bash
 # GitHub Codespaces optimized demo startup
-# Designed to minimize resource usage and maximize client impact
+# Robust error handling for client presentations
 
-echo "🏪 Starting Inventory Intelligence Demo for Client Presentation..."
+set -e  # Exit on error, but handle gracefully
+
+echo "🏪 Starting Inventory Intelligence Demo..."
+
+# Check if we're in Codespaces
+if [[ -n "$CODESPACE_NAME" ]]; then
+    echo "✅ Running in GitHub Codespaces: $CODESPACE_NAME"
+    DASHBOARD_URL="https://$CODESPACE_NAME-8501.app.github.dev"
+    H2O_URL="https://$CODESPACE_NAME-54321.app.github.dev"
+else
+    echo "🖥️  Running locally"
+    DASHBOARD_URL="http://localhost:8501"
+    H2O_URL="http://localhost:54321"
+fi
 
 # Function to check if service is running
 check_service() {
     local url=$1
     local service_name=$2
+    local max_attempts=${3:-30}
     
-    for i in {1..30}; do
-        if curl -s "$url" >/dev/null 2>&1; then
-            echo "✅ $service_name is ready!"
+    echo "⏳ Waiting for $service_name..."
+    for i in $(seq 1 $max_attempts); do
+        if curl -s --max-time 5 "$url" >/dev/null 2>&1; then
+            echo "✅ $service_name is ready at $url"
             return 0
         fi
         sleep 2
+        echo "   ... attempt $i/$max_attempts"
     done
-    echo "❌ $service_name failed to start"
+    echo "⚠️  $service_name not responding at $url"
     return 1
 }
 
-# Start H2O cluster in lightweight mode
-echo "🤖 Starting H2O cluster (lightweight mode)..."
-docker run -d \
-    --name h2o-demo \
-    -p 54321:54321 \
-    -e H2O_ARGS="-Xmx2g -nthreads 2" \
-    --restart unless-stopped \
-    h2oai/h2o-open-source:latest
-
-# Check H2O cluster
-if check_service "http://localhost:54321" "H2O Cluster"; then
-    echo "🎯 H2O cluster running with 2GB RAM limit"
-else
-    echo "⚠️  H2O cluster not responding - demo will run in mock mode"
+# Install H2O if not available (lightweight approach)
+if ! python3 -c "import h2o" 2>/dev/null; then
+    echo "📦 Installing H2O (this may take 2-3 minutes)..."
+    pip install h2o==3.46.0.2 --quiet
 fi
 
-# Generate demo data (quick version)
+# Generate quick demo data
 echo "📊 Generating demo data..."
 python3 -c "
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
+import os
 
-# Quick synthetic data for demo
+# Ensure data directory exists
+os.makedirs('shared/data', exist_ok=True)
+
+# Quick synthetic data for demo (reduced size for speed)
 np.random.seed(42)
-dates = pd.date_range('2023-01-01', '2023-12-31', freq='D')
-products = [f'PROD_{i:03d}' for i in range(1, 21)]  # Only 20 products for speed
+dates = pd.date_range('2023-01-01', '2023-06-30', freq='D')  # 6 months instead of 2 years
+products = [f'PROD_{i:03d}' for i in range(1, 21)]  # 20 products instead of 50
 categories = ['Electronics', 'Clothing', 'Food', 'Books', 'Home']
 
 data = []
 for product in products:
-    for date in dates:
-        # Realistic retail patterns
+    for date in dates[:50]:  # Only 50 days per product for speed
         base_demand = np.random.uniform(5, 50)
         seasonal = 1 + 0.3 * np.sin(2 * np.pi * date.dayofyear / 365)
         weekend = 1.2 if date.weekday() >= 5 else 1.0
-        holiday = 2.0 if date.month in [11, 12] else 1.0
-        demand = max(1, int(base_demand * seasonal * weekend * holiday * np.random.uniform(0.8, 1.2)))
+        demand = max(1, int(base_demand * seasonal * weekend * np.random.uniform(0.8, 1.2)))
         
         data.append({
             'date': date,
             'product_id': product,
             'category': np.random.choice(categories),
             'quantity_sold': demand,
-            'price': np.random.uniform(10, 200),
+            'price': round(np.random.uniform(10, 200), 2),
             'stock_level': np.random.randint(20, 300),
             'day_of_week': date.weekday(),
             'month': date.month,
             'is_weekend': int(date.weekday() >= 5),
             'is_holiday_season': int(date.month in [11, 12]),
             'on_promotion': int(np.random.random() < 0.1),
-            'quantity_sold_7d_avg': demand * np.random.uniform(0.9, 1.1),
-            'quantity_sold_30d_avg': demand * np.random.uniform(0.85, 1.15)
+            'quantity_sold_7d_avg': round(demand * np.random.uniform(0.9, 1.1), 2),
+            'quantity_sold_30d_avg': round(demand * np.random.uniform(0.85, 1.15), 2)
         })
 
 df = pd.DataFrame(data)
 df.to_csv('shared/data/demo_data.csv', index=False)
-print(f'✅ Generated {len(df)} demo records for client presentation')
+print(f'✅ Generated {len(df)} demo records')
 "
 
-# Start Streamlit dashboard
-echo "🚀 Starting Interactive Dashboard..."
+# Start Streamlit dashboard (no H2O cluster needed for basic demo)
+echo "🚀 Starting Streamlit Dashboard..."
 export DEMO_MODE=true
-export AUTO_START=true
+export PYTHONPATH=/workspaces/inventory-intelligence-h2o:$PYTHONPATH
 
-# Start Streamlit in background with client-optimized settings
-streamlit run streamlit_app.py \
+# Start Streamlit in background
+nohup streamlit run streamlit_app.py \
     --server.port=8501 \
     --server.address=0.0.0.0 \
     --server.headless=true \
     --server.runOnSave=false \
     --server.fileWatcherType=none \
-    --browser.gatherUsageStats=false &
+    --browser.gatherUsageStats=false \
+    > logs/streamlit.log 2>&1 &
 
-# Wait for dashboard
-if check_service "http://localhost:8501/_stcore/health" "Dashboard"; then
+# Wait for dashboard to be ready
+if check_service "$DASHBOARD_URL/_stcore/health" "Streamlit Dashboard" 20; then
     echo ""
-    echo "🎉 CLIENT DEMO ENVIRONMENT READY!"
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo "📊 DASHBOARD: https://$CODESPACE_NAME-8501.app.github.dev"
-    echo "🤖 H2O CLUSTER: https://$CODESPACE_NAME-54321.app.github.dev"
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "🎉 INVENTORY INTELLIGENCE DEMO READY!"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "📊 DASHBOARD: $DASHBOARD_URL"
+    if [[ -n "$CODESPACE_NAME" ]]; then
+        echo "🔗 DIRECT LINK: $DASHBOARD_URL"
+    fi
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
-    echo "🎯 DEMO TALKING POINTS:"
-    echo "• AI-powered demand forecasting with 90%+ accuracy"
-    echo "• Zero-cold-start with synthetic data generation"  
-    echo "• Real-time inventory optimization recommendations"
-    echo "• Enterprise-ready Docker deployment"
-    echo "• $1.1T market opportunity in retail intelligence"
+    echo "🎯 DEMO FEATURES READY:"
+    echo "• 📊 Executive KPI Dashboard"
+    echo "• 🔮 AI-Powered Demand Forecasting" 
+    echo "• 📈 Advanced Analytics & Trends"
+    echo "• 📋 Data Management & Upload"
     echo ""
-    echo "💡 This demo uses lightweight settings to optimize Codespaces usage"
-    echo "⏱️  Estimated resource consumption: 2 CPU hours for 4-hour demo"
+    echo "💡 Click the dashboard link above to start your presentation!"
+    echo "🛑 Run './scripts/stop-demo.sh' when finished to save resources"
     echo ""
 else
-    echo "❌ Demo startup failed. Check logs with: docker logs h2o-demo"
+    echo "❌ Demo startup failed. Checking logs..."
+    echo ""
+    echo "🔍 Streamlit logs:"
+    tail -20 logs/streamlit.log 2>/dev/null || echo "No log file found"
+    echo ""
+    echo "🩺 Troubleshooting:"
+    echo "1. Check if port 8501 is available: netstat -tlnp | grep 8501"
+    echo "2. Try manual start: streamlit run streamlit_app.py"
+    echo "3. Check Python path: echo \$PYTHONPATH"
+    exit 1
 fi

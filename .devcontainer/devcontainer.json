@@ -1,8 +1,7 @@
 {
-	"name": "Inventory Intelligence - H2O.AI",
+	"name": "Inventory Intelligence H2O.AI",
 	"image": "mcr.microsoft.com/devcontainers/python:3.9",
 	"features": {
-		"ghcr.io/devcontainers/features/docker-in-docker:2": {},
 		"ghcr.io/devcontainers/features/java:1": {
 			"version": "11"
 		}
@@ -11,14 +10,10 @@
 		"vscode": {
 			"extensions": [
 				"ms-python.python",
-				"ms-python.flake8",
-				"ms-toolsai.jupyter",
-				"redhat.vscode-yaml",
-				"ms-vscode.vscode-json"
+				"ms-toolsai.jupyter"
 			],
 			"settings": {
-				"python.defaultInterpreterPath": "/usr/local/bin/python",
-				"python.terminal.activateEnvironment": true
+				"python.defaultInterpreterPath": "/usr/local/bin/python"
 			}
 		}
 	},
@@ -33,11 +28,9 @@
 			"onAutoForward": "silent"
 		}
 	},
-	"postCreateCommand": ".devcontainer/setup.sh",
-	"postStartCommand": ".devcontainer/start.sh",
+	"postCreateCommand": "bash .devcontainer/setup.sh",
 	"remoteUser": "vscode",
 	"containerEnv": {
-		"PYTHONPATH": "/workspaces/inventory-intelligence-h2o",
-		"H2O_URL": "http://localhost:54321"
+		"PYTHONPATH": "/workspaces/inventory-intelligence-h2o"
 	}
 }
