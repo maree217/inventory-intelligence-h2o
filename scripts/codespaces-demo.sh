@@ -2,7 +2,8 @@
 # GitHub Codespaces optimized demo startup
 # Robust error handling for client presentations
 
-set -e  # Exit on error, but handle gracefully
+# Disable strict error exit for better error handling
+set +e
 
 echo "🏪 Starting Inventory Intelligence Demo..."
 
@@ -11,17 +12,38 @@ if [[ -n "$CODESPACE_NAME" ]]; then
     echo "✅ Running in GitHub Codespaces: $CODESPACE_NAME"
     DASHBOARD_URL="https://$CODESPACE_NAME-8501.app.github.dev"
     H2O_URL="https://$CODESPACE_NAME-54321.app.github.dev"
+    PIP_CMD="pip"
+    PYTHON_CMD="python3"
 else
     echo "🖥️  Running locally"
     DASHBOARD_URL="http://localhost:8501"
     H2O_URL="http://localhost:54321"
+    
+    # Try to find pip command (virtual env aware)
+    if command -v ../venv/bin/pip >/dev/null 2>&1; then
+        PIP_CMD="../venv/bin/pip"
+        PYTHON_CMD="../venv/bin/python"
+        echo "📦 Using virtual environment"
+    elif command -v pip3 >/dev/null 2>&1; then
+        PIP_CMD="pip3"
+        PYTHON_CMD="python3"
+    elif command -v pip >/dev/null 2>&1; then
+        PIP_CMD="pip"
+        PYTHON_CMD="python3"
+    else
+        echo "❌ No pip command found. Please install Python and pip."
+        exit 1
+    fi
 fi
+
+echo "🔧 Using Python: $PYTHON_CMD"
+echo "🔧 Using pip: $PIP_CMD"
 
 # Function to check if service is running
 check_service() {
     local url=$1
     local service_name=$2
-    local max_attempts=${3:-30}
+    local max_attempts=${3:-20}
     
     echo "⏳ Waiting for $service_name..."
     for i in $(seq 1 $max_attempts); do
@@ -36,15 +58,27 @@ check_service() {
     return 1
 }
 
-# Install H2O if not available (lightweight approach)
-if ! python3 -c "import h2o" 2>/dev/null; then
-    echo "📦 Installing H2O (this may take 2-3 minutes)..."
-    pip install h2o==3.46.0.2 --quiet
+# Check and install required packages
+echo "📦 Checking required packages..."
+
+# Check if packages are available
+if ! $PYTHON_CMD -c "import streamlit, pandas, numpy, plotly" 2>/dev/null; then
+    echo "📦 Installing required packages..."
+    $PIP_CMD install streamlit pandas numpy plotly --quiet
 fi
+
+# Install H2O if not available (optional for basic demo)
+if ! $PYTHON_CMD -c "import h2o" 2>/dev/null; then
+    echo "📦 H2O not found - installing (may take 2-3 minutes)..."
+    $PIP_CMD install h2o==3.46.0.2 --quiet || echo "⚠️ H2O installation failed - demo will run without H2O AutoML"
+fi
+
+# Create directories
+mkdir -p shared/data logs
 
 # Generate quick demo data
 echo "📊 Generating demo data..."
-python3 -c "
+$PYTHON_CMD -c "
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
@@ -55,8 +89,8 @@ os.makedirs('shared/data', exist_ok=True)
 
 # Quick synthetic data for demo (reduced size for speed)
 np.random.seed(42)
-dates = pd.date_range('2023-01-01', '2023-06-30', freq='D')  # 6 months instead of 2 years
-products = [f'PROD_{i:03d}' for i in range(1, 21)]  # 20 products instead of 50
+dates = pd.date_range('2023-01-01', '2023-06-30', freq='D')
+products = [f'PROD_{i:03d}' for i in range(1, 21)]
 categories = ['Electronics', 'Clothing', 'Food', 'Books', 'Home']
 
 data = []
@@ -85,53 +119,90 @@ for product in products:
 
 df = pd.DataFrame(data)
 df.to_csv('shared/data/demo_data.csv', index=False)
-print(f'✅ Generated {len(df)} demo records')
+print(f'Generated {len(df)} demo records for presentation')
 "
 
-# Start Streamlit dashboard (no H2O cluster needed for basic demo)
+if [[ $? -eq 0 ]]; then
+    echo "✅ Demo data generated successfully"
+else
+    echo "❌ Failed to generate demo data"
+    exit 1
+fi
+
+# Start Streamlit dashboard
 echo "🚀 Starting Streamlit Dashboard..."
 export DEMO_MODE=true
-export PYTHONPATH=/workspaces/inventory-intelligence-h2o:$PYTHONPATH
 
-# Start Streamlit in background
-nohup streamlit run streamlit_app.py \
-    --server.port=8501 \
-    --server.address=0.0.0.0 \
-    --server.headless=true \
-    --server.runOnSave=false \
-    --server.fileWatcherType=none \
-    --browser.gatherUsageStats=false \
-    > logs/streamlit.log 2>&1 &
+# Kill any existing streamlit processes
+pkill -f streamlit >/dev/null 2>&1 || true
+
+# Set Python path
+if [[ -n "$CODESPACE_NAME" ]]; then
+    export PYTHONPATH=/workspaces/inventory-intelligence-h2o:$PYTHONPATH
+else
+    export PYTHONPATH=$(pwd):$PYTHONPATH
+fi
+
+# Start Streamlit with explicit command
+if [[ -n "$CODESPACE_NAME" ]]; then
+    # Codespace environment
+    nohup $PYTHON_CMD -m streamlit run streamlit_app.py \
+        --server.port=8501 \
+        --server.address=0.0.0.0 \
+        --server.headless=true \
+        --server.runOnSave=false \
+        --server.fileWatcherType=none \
+        --browser.gatherUsageStats=false \
+        > logs/streamlit.log 2>&1 &
+else
+    # Local environment
+    nohup $PYTHON_CMD -m streamlit run streamlit_app.py \
+        --server.port=8501 \
+        --server.address=localhost \
+        --server.headless=true \
+        > logs/streamlit.log 2>&1 &
+fi
+
+echo "🔄 Streamlit starting in background..."
 
 # Wait for dashboard to be ready
-if check_service "$DASHBOARD_URL/_stcore/health" "Streamlit Dashboard" 20; then
+sleep 5  # Give it time to start
+
+if check_service "$DASHBOARD_URL/_stcore/health" "Streamlit Dashboard" 15; then
     echo ""
     echo "🎉 INVENTORY INTELLIGENCE DEMO READY!"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo "📊 DASHBOARD: $DASHBOARD_URL"
     if [[ -n "$CODESPACE_NAME" ]]; then
-        echo "🔗 DIRECT LINK: $DASHBOARD_URL"
+        echo "🌐 PUBLIC URL: $DASHBOARD_URL"
     fi
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
     echo "🎯 DEMO FEATURES READY:"
-    echo "• 📊 Executive KPI Dashboard"
-    echo "• 🔮 AI-Powered Demand Forecasting" 
-    echo "• 📈 Advanced Analytics & Trends"
-    echo "• 📋 Data Management & Upload"
+    echo "• 📊 Executive KPI Dashboard with ROI metrics"
+    echo "• 🔮 AI-Powered Demand Forecasting simulation" 
+    echo "• 📈 Advanced Analytics & Business Intelligence"
+    echo "• 📋 Data Management & CSV Upload capabilities"
     echo ""
-    echo "💡 Click the dashboard link above to start your presentation!"
+    echo "💡 Click the dashboard link above to start your client presentation!"
     echo "🛑 Run './scripts/stop-demo.sh' when finished to save resources"
     echo ""
 else
-    echo "❌ Demo startup failed. Checking logs..."
+    echo "❌ Demo startup failed. Troubleshooting information:"
     echo ""
     echo "🔍 Streamlit logs:"
-    tail -20 logs/streamlit.log 2>/dev/null || echo "No log file found"
+    if [[ -f logs/streamlit.log ]]; then
+        echo "Last 10 lines of streamlit.log:"
+        tail -10 logs/streamlit.log
+    else
+        echo "No log file found at logs/streamlit.log"
+    fi
     echo ""
-    echo "🩺 Troubleshooting:"
-    echo "1. Check if port 8501 is available: netstat -tlnp | grep 8501"
-    echo "2. Try manual start: streamlit run streamlit_app.py"
-    echo "3. Check Python path: echo \$PYTHONPATH"
+    echo "🩺 Manual troubleshooting steps:"
+    echo "1. Check Python: $PYTHON_CMD --version"
+    echo "2. Check packages: $PYTHON_CMD -c 'import streamlit, pandas, numpy, plotly'"
+    echo "3. Test manually: $PYTHON_CMD -m streamlit run streamlit_app.py"
+    echo "4. Check port: netstat -tlnp | grep 8501"
+    echo "5. Check process: ps aux | grep streamlit"
     exit 1
 fi
