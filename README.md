@@ -2,7 +2,7 @@
 
 > **Revolutionary retail intelligence powered by H2O.AI's AutoML - Transform your inventory management from reactive to predictive**
 
-[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/yourusername/inventory-intelligence-h2o?quickstart=1)
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/maree217/inventory-intelligence-h2o?quickstart=1)
 
 ## 🚀 Business Executive Summary
 
@@ -125,7 +125,7 @@ Traditional BI tools show what happened. Our platform tells you:
 
 ### Option 2: Local Development
 ```bash
-git clone https://github.com/yourusername/inventory-intelligence-h2o
+git clone https://github.com/maree217/inventory-intelligence-h2o
 cd inventory-intelligence-h2o
 ./deploy.sh
 ```
@@ -295,7 +295,7 @@ aml = H2OAutoML(
 - **Sales**: sales@yourcompany.com
 - **Technical Support**: support@yourcompany.com  
 - **Documentation**: [docs.yourcompany.com](docs.yourcompany.com)
-- **Community**: [GitHub Discussions](https://github.com/yourusername/inventory-intelligence-h2o/discussions)
+- **Community**: [GitHub Discussions](https://github.com/maree217/inventory-intelligence-h2o/discussions)
 
 ---
 
