@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+  h2o:
+    image: h2oai/h2o-open-source:latest
+    ports:
+      - "54321:54321"
+    volumes:
+      - ../shared/data:/data
+      - ../shared/models:/models
+    environment:
+      - H2O_ARGS=-Xmx4g
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:54321"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8501:8501"
+    depends_on:
+      h2o:
+        condition: service_healthy
+    environment:
+      - H2O_URL=http://h2o:54321
+    volumes:
+      - ../shared:/app/shared

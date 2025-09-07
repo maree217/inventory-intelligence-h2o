@@ -1,0 +1,49 @@
+name: Codespaces Demo Environment
+
+on:
+  workflow_dispatch:
+    inputs:
+      demo_mode:
+        description: 'Demo configuration'
+        required: true
+        default: 'lightweight'
+        type: choice
+        options:
+        - lightweight
+        - full
+
+jobs:
+  demo-health-check:
+    runs-on: ubuntu-latest
+    if: github.codespaces
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+        
+    - name: Install dependencies
+      run: |
+        pip install --upgrade pip
+        pip install -r requirements.txt
+        
+    - name: Test dashboard components
+      run: |
+        python -c "import streamlit, plotly, pandas, numpy; print('✅ All dependencies available')"
+        
+    - name: Validate demo scripts
+      run: |
+        chmod +x scripts/*.sh
+        bash -n scripts/codespaces-demo.sh
+        bash -n scripts/stop-demo.sh
+        echo "✅ Demo scripts validated"
+        
+    - name: Demo environment ready
+      run: |
+        echo "🚀 Demo environment validated for Codespaces"
+        echo "💡 Run './scripts/codespaces-demo.sh' to start client demo"
+        echo "📊 Estimated resource usage: 1-2 core hours per demo"
